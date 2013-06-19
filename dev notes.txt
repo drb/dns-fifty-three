@@ -1,0 +1,11 @@
+get the local wifi network we're connected to
+
+/System/Library/PrivateFrameworks/Apple80211.framework/Versions/A/Resources/airport -I | grep -w ' SSID'
+
+lists domains in route 53 (need to be in boto bin)
+
+./route53 ls
+
+creates (or updates if there) an A record foo2.xxx pointing at 127.0.0.1 for zone id Z3FY4T339F2UL8
+
+./route53 change_record Z3FY4T339F2UL8 foo2.pacosystems.com. A 127.0.0.1
