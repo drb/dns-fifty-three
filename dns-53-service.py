@@ -21,6 +21,8 @@ class Dns53(Daemon):
 
 	def __init__(self, pid):
 
+		print '[log] Daemon loaded'
+
 		# load the config
 		stream = open("53.yaml", 'r')
 		self.conf = yaml.safe_load(stream)
@@ -35,7 +37,7 @@ class Dns53(Daemon):
 		if plugins_root_path != '':
 
 			if os.access(plugins_root_path, os.R_OK) == False:
-				print 'Plugin path is set but not readable by agent. Skipping plugins.'
+				print '[log] Check plugin path is not readable'
 				return False
 
 		else:
@@ -70,34 +72,35 @@ class Dns53(Daemon):
 				plugin_path = os.path.join(plugins_root_path, '%s.py' % plugin_name)
 
 				if os.access(plugins_root_path, os.R_OK) == False:
-					print 'Unable to read dir so skipping this plugin.', plugins_root_path
+
+					print '[log] Unable to read dir so skipping this plugin.', plugins_root_path
 					continue
 
 				try:
-					# Import the plugin, but only from the pluginDirectory (ensures no conflicts with other module names elsehwhere in the sys.path
+					# import the check plugin
 					import imp
 					importedPlugin = imp.load_source(plugin_name, plugin_path)
 
-					# Find out the class name and then instantiate it
+					# attempt to create an instance of the plugin
 					pluginClass = getattr(importedPlugin, plugin_name)
 
 					try:
-						pluginObj = pluginClass(self.conf)
+						pluginObj = pluginClass(self.conf['pluginDir'], self.conf)
 
 					except TypeError:
 
 						print TypeError
 
-					# Store in class var so we can execute it again on the next cycle
+					# store this in the class, the plugins will be cycled on the next pass
 					self.plugins.append(pluginObj)
 
 				except Exception, ex:
-					print 'Error loading check plugin', ex
+					print '[error] Error loading check plugin', ex
 
-		# Now execute the objects previously created
+		# execute all cached plugins
 		if self.plugins != None:
 
-			# Execute the plugins
+			# stores the output - True indicate a check pass, and all checks must pass for the DNS update to occur
 			output = {}
 
 			for plugin in self.plugins:
@@ -106,9 +109,7 @@ class Dns53(Daemon):
 					output[plugin.__class__.__name__] = plugin.run()
 
 				except Exception, ex:
-					print 'Error running plugin', ex
-
-				print plugin.__class__.__name__, 'output', output
+					print '[error] Error running plugin', ex
 
 			# Each plugin needs to return True to fire the DNS update request
 			return output
@@ -135,7 +136,9 @@ class Dns53(Daemon):
 		plugin_checks = self.loadCheckPlugins(self.conf['pluginDir'])
 
 		for plugin_name, result in plugin_checks.items():
-			print plugin_name, result
+
+			print '[check]', plugin_name, result
+
 			if result == False:
 				checks_passed = False
 
@@ -148,11 +151,12 @@ class Dns53(Daemon):
 			host_name = self.conf['recordName']
 
 			current_record = None
-			conn = boto.connect_route53()
+
+			# todo check if yaml keys exist, otherwise default to ENV variables or fail
+			conn = boto.connect_route53(self.conf['awsKey'], self.conf['awsSecret'])
 
 			# dict of all entries for this zone
 			existing_entries = conn.get_all_rrsets(self.conf['zoneId'])
-
 
 			# find the target cname in the entries
 			for x in existing_entries:
@@ -161,7 +165,6 @@ class Dns53(Daemon):
 					host_name_period = host_name_period + '.'
 
 				if x.name == host_name_period:
-					print "i found ", host_name, x.resource_records
 					current_record = x
 					break
 				else:
@@ -170,10 +173,11 @@ class Dns53(Daemon):
 			# a matching record was found, so test it against the IP we retrieved form the webservice and check if it needs an update
 			if x != None:
 
+				# array of ips against the dns entry
 				if ip in current_record.resource_records:
-					print 'no change required'
+					print '[log] No changes required'
 				else:
-					print 'need to update', current_record.resource_records, 'to', ip
+					print '[log] Need to update', ', '.join(current_record.resource_records), 'to', ip
 
 					changes = ResourceRecordSets(conn, self.conf['zoneId'])
 
@@ -185,12 +189,15 @@ class Dns53(Daemon):
 					change = changes.add_change("CREATE", host_name, "A")
 					change.add_value(ip)
 
-					#check the result
-					result = changes.commit()
+					try:
+						#check the result
+						result = changes.commit()
+					except Exception, e:
+						print '[error]', e
 
 			# if it needs to be created, do it now
 			else:
-				print host_name, 'record needs to be created'
+				print host_name, '[log] Record needs to be created for', host_name
 
 				changes = ResourceRecordSets(conn, self.conf['zoneId'])
 

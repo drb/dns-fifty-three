@@ -1,3 +1,5 @@
+import yaml
+
 import subprocess
 import os
 import platform
@@ -22,13 +24,25 @@ import platform
 class WifiZone ():
 
 	conf = {}
-	target = 'Kaeto'
 
-	def __init__(self, conf):
+	def __init__(self, plugin_dir, conf):
 
-		print 'Check plugin loaded', self.__class__.__name__
+		print '[check_load] ', self.__class__.__name__, 'loaded'
 
 		self.conf = conf
+
+		# the check plugin's naming convention shuold be __class__.__name__ . yaml i.e. WifiZone.yaml
+		config_path = plugin_dir + '/' + self.__class__.__name__ + '.yaml'
+
+		# if the path exists, merge the yaml contents with the global config
+		if os.access("./", os.R_OK) != False and os.path.exists(config_path):
+
+			# load the plugin config
+			stream = open(config_path, 'r')
+			conf = yaml.safe_load(stream)
+			stream.close()
+
+			self.conf = dict(self.conf.items() + conf.items())
 
 	def run(self):
 
@@ -55,11 +69,13 @@ class WifiZone ():
 					try:
 						key, value = parts.split(':', 1)
 					except Exception, ex:
-						print ex
+						print '[error]', ex
 									
+					# check the name of the SSID against the one in the config
+					# todo make this check all keys in the config if they're there
 					if key.strip().lower() == 'ssid':
 						value = str(value).strip()
-						if str(value) == self.target:
+						if str(value) == self.conf['SSID']:
 							output = True
 		else:
 			print '[warning]', self.__class__.__name__, 'does not have a method implemented to extract wifi zone yet'
