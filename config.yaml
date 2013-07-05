@@ -1,0 +1,17 @@
+# PLUGINS
+pluginDir: './check-plugins'
+
+# AWS Credentials
+# TODO also support credentials in env vars
+awsKey: XXXXXXXXXXXXXXXXXX
+awsSecret: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# The zone id we're writing to
+zoneId: ZXXXXXXXXXXXXX
+
+# The record (A record) to update
+recordName: 'subdomain.domain.com'
+
+# IP resolver enpoint - this returns a simple JSON structure like this:
+# {"client_ip":"127.0.0.1"}
+ipResolver: http://dns-53.pacosystems.com/

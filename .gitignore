@@ -1,5 +1,7 @@
 *.py[cod]
 
+53.yaml
+
 # C extensions
 *.so
 

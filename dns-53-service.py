@@ -11,7 +11,7 @@ from boto.route53.record import ResourceRecordSets
 from daemon import Daemon
 
 checkConfig = {}
-checkConfig['interval'] = 600 # call every 10 minutes;
+checkConfig['interval'] = 1800 # call every 10 minutes;
 
 class Dns53(Daemon):
 
@@ -24,7 +24,7 @@ class Dns53(Daemon):
 		print '[log] Daemon loaded'
 
 		# load the config
-		stream = open("53.yaml", 'r')
+		stream = open("config.yaml", 'r')
 		self.conf = yaml.safe_load(stream)
 		stream.close()
 
