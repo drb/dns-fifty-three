@@ -1,4 +1,29 @@
 dns-fifty-three
 ===============
 
-A DynDNS-like clone using Amazon Route53
+A DynDNS-like clone using Amazon Route53, with conditional updates.
+
+Plugins allow the DNS updates to be fired only when the conditions set by the plugin rules are true.
+
+Currently, the only rule is to check if the machine is connected to a particular wireless SSID, as I was sick of the DynDNS agent updating my DNS records for my home IP to be wherever the hell I happened to be connected to.
+
+And that will probably be all they ever do ;)
+
+Plugin architecture
+-------------------
+
+Plugins are written in Python, and live in the directory `check-plugins`.
+
+All plugins need to consist of a class, accepting 2 arguments `plugin_dir`, `conf` in the constructor. The only requisite method is `run()`, this must return a boolean True or False to indicate if the check passed.
+
+    class TruthCheck ():
+    
+      conf = {}
+    
+      def __init__(self, plugin_dir, conf):
+    
+            # do something
+    
+      def run(self):
+    
+            return True
