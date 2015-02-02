@@ -144,6 +144,8 @@ class Dns53(Daemon):
 
 		if checks_passed:
 
+			# @todo 
+
 			f = urllib2.urlopen(self.conf['ipResolver']).read()
 			j = json.loads(f)
 
@@ -152,7 +154,7 @@ class Dns53(Daemon):
 
 			current_record = None
 
-			# todo check if yaml keys exist, otherwise default to ENV variables or fail
+			# @todo check if yaml keys exist, otherwise default to ENV variables or fail
 			conn = boto.connect_route53(self.conf['awsKey'], self.conf['awsSecret'])
 
 			# dict of all entries for this zone

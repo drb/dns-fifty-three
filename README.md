@@ -12,11 +12,11 @@ And that will probably be all they ever do ;)
 Pre-requisites
 -------------
 
-A YAML parser is required for the config files
+A YAML parser is required for the config files.
 
 `pip install pyyaml`
 
-BOTO is required to communicate with Route53
+BOTO is required to communicate with Route53.
 
 `sudo pip install -U boto`
 
