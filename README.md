@@ -38,3 +38,25 @@ All plugins need to consist of a class, accepting 2 arguments `plugin_dir`, `con
       def run(self):
     
             return True
+
+Starting the service in foreground
+----------------------------------
+
+This will die with the SSH session
+
+`python dns-53-service.py foreground`
+
+Starting the service as a daemon
+--------------------------------
+
+`python dns-53-service.py start`
+
+Stopping the service
+--------------------
+
+`python dns-53-service.py stop`
+
+Restarting the service
+----------------------
+
+`python dns-53-service.py restart`
