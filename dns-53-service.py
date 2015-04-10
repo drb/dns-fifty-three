@@ -21,7 +21,7 @@ class Dns53(Daemon):
 
 	def __init__(self, pid):
 
-		print '[log] Daemon loaded'
+		print '[log] Daemon loaded', pid
 
 		# load the config
 		stream = open("config.yaml", 'r')
@@ -210,5 +210,22 @@ class Dns53(Daemon):
 		# schedule the next check
 		self.setNextCheck()
 
-check = Dns53('/dev/null/pid.pid')
-check.run()
+
+if __name__ == "__main__":
+    check = Dns53('/dev/null/dns.pid')
+    if len(sys.argv) == 2:
+        if 'start' == sys.argv[1]:
+            check.start()
+        elif 'stop' == sys.argv[1]:
+            check.stop()
+        elif 'restart' == sys.argv[1]:
+            check.restart()
+        elif 'foreground' == sys.argv[1]:
+            check.run()
+        else:
+            print "Unknown command"
+            sys.exit(2)
+        sys.exit(0)
+    else:
+        print "usage: %s start|stop|restart" % sys.argv[0]
+        sys.exit(2)

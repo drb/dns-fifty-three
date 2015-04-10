@@ -1,34 +1,39 @@
-"""
-    ***
-    Modified generic daemon class
-    ***
+'''
+***
+Modified generic daemon class
+***
 
-    Author: http://www.jejik.com/articles/2007/02/a_simple_unix_linux_daemon_in_python/
+Author:         http://www.jejik.com/articles/2007/02/
+                        a_simple_unix_linux_daemon_in_python/www.boxedice.com
 
-    License: http://creativecommons.org/licenses/by-sa/3.0/
-"""
+License:        http://creativecommons.org/licenses/by-sa/3.0/
+'''
 
 # Core modules
 import atexit
 import os
 import sys
 import time
+import signal
 
-from signal import SIGTERM
 
-
-class Daemon:
+class Daemon(object):
     """
     A generic daemon class.
 
     Usage: subclass the Daemon class and override the run() method
     """
-    def __init__(self, pidfile, stdin=os.devnull, stdout=os.devnull,
-                 stderr=os.devnull):
+    def __init__(self, pidfile, stdin=os.devnull,
+                 stdout=os.devnull, stderr=os.devnull,
+                 home_dir='.', umask=022, verbose=1):
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
         self.pidfile = pidfile
+        self.home_dir = home_dir
+        self.verbose = verbose
+        self.umask = umask
+        self.daemon_alive = True
 
     def daemonize(self):
         """
@@ -47,9 +52,9 @@ class Daemon:
             sys.exit(1)
 
         # Decouple from parent environment
-        os.chdir("/")
+        os.chdir(self.home_dir)
         os.setsid()
-        os.umask(0)
+        os.umask(self.umask)
 
         # Do second fork
         try:
@@ -66,41 +71,50 @@ class Daemon:
             # Redirect standard file descriptors
             sys.stdout.flush()
             sys.stderr.flush()
-            si = open(self.stdin, 'r')
-            so = open(self.stdout, 'a+')
-            se = open(self.stderr, 'a+', 0)
+            si = file(self.stdin, 'r')
+            so = file(self.stdout, 'a+')
+            if self.stderr:
+                se = file(self.stderr, 'a+', 0)
+            else:
+                se = so
             os.dup2(si.fileno(), sys.stdin.fileno())
             os.dup2(so.fileno(), sys.stdout.fileno())
             os.dup2(se.fileno(), sys.stderr.fileno())
 
-        print "Started"
+        def sigtermhandler(signum, frame):
+            self.daemon_alive = False
+            signal.signal(signal.SIGTERM, sigtermhandler)
+            signal.signal(signal.SIGINT, sigtermhandler)
+
+        if self.verbose >= 1:
+            print "Started"
 
         # Write pidfile
-        # Make sure pid file is removed if we quit
-        atexit.register(self.delpid)
+        atexit.register(
+            self.delpid)  # Make sure pid file is removed if we quit
         pid = str(os.getpid())
-        pid_handler = open(self.pidfile, 'w+')
-        pid_handler.write("%s\n" % pid)
-        pid_handler.close()
+        file(self.pidfile, 'w+').write("%s\n" % pid)
 
     def delpid(self):
         os.remove(self.pidfile)
 
-    def start(self):
+    def start(self, *args, **kwargs):
         """
         Start the daemon
         """
 
-        print "Starting..."
+        if self.verbose >= 1:
+            print "Starting..."
 
         # Check for a pidfile to see if the daemon already runs
-        pid = None
         try:
-            pf = open(self.pidfile, 'r')
+            pf = file(self.pidfile, 'r')
             pid = int(pf.read().strip())
             pf.close()
-        except (IOError, SystemExit):
-            pass
+        except IOError:
+            pid = None
+        except SystemExit:
+            pid = None
 
         if pid:
             message = "pidfile %s already exists. Is it already running?\n"
@@ -109,23 +123,18 @@ class Daemon:
 
         # Start the daemon
         self.daemonize()
-        self.run()
+        self.run(*args, **kwargs)
 
     def stop(self):
         """
         Stop the daemon
         """
 
-        print "Stopping..."
+        if self.verbose >= 1:
+            print "Stopping..."
 
         # Get the pid from the pidfile
-        pid = None
-        try:
-            pf = open(self.pidfile, 'r')
-            pid = int(pf.read().strip())
-            pf.close()
-        except (IOError, ValueError):
-            pass
+        pid = self.get_pid()
 
         if not pid:
             message = "pidfile %s does not exist. Not running?\n"
@@ -140,9 +149,13 @@ class Daemon:
 
         # Try killing the daemon process
         try:
+            i = 0
             while 1:
-                os.kill(pid, SIGTERM)
+                os.kill(pid, signal.SIGTERM)
                 time.sleep(0.1)
+                i = i + 1
+                if i % 10 == 0:
+                    os.kill(pid, signal.SIGHUP)
         except OSError, err:
             err = str(err)
             if err.find("No such process") > 0:
@@ -152,7 +165,8 @@ class Daemon:
                 print str(err)
                 sys.exit(1)
 
-        print "Stopped"
+        if self.verbose >= 1:
+            print "Stopped"
 
     def restart(self):
         """
@@ -161,9 +175,33 @@ class Daemon:
         self.stop()
         self.start()
 
+    def get_pid(self):
+        try:
+            pf = file(self.pidfile, 'r')
+            pid = int(pf.read().strip())
+            pf.close()
+        except IOError:
+            pid = None
+        except SystemExit:
+            pid = None
+        return pid
+
+    def is_running(self):
+        pid = self.get_pid()
+        
+        if pid == None:
+            print 'Process is stopped'
+        elif os.path.exists('/proc/%d' % pid):
+            print 'Process (pid %d) is running...' % pid
+        else:
+            print 'Process (pid %d) is killed' % pid
+        
+        return pid and os.path.exists('/proc/%d' % pid)
+
     def run(self):
         """
-        You should override this method when you subclass Daemon. It will be
-        called after the process has been daemonized by start() or restart().
+        You should override this method when you subclass Daemon.
+        It will be called after the process has been
+        daemonized by start() or restart().
         """
-        pass
+        raise NotImplementedError
