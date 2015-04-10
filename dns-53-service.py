@@ -11,7 +11,7 @@ from boto.route53.record import ResourceRecordSets
 from daemon import Daemon
 
 checkConfig = {}
-checkConfig['interval'] = 1800 # call every 10 minutes;
+checkConfig['interval'] = (60 * 25) # call every 25 minutes;
 
 class Dns53(Daemon):
 
@@ -154,6 +154,9 @@ class Dns53(Daemon):
 
 			current_record = None
 
+			# ENV - AWS_ACCESS_KEY_ID
+			# ENV - AWS_SECRET_ACCESS_KEY
+
 			# @todo check if yaml keys exist, otherwise default to ENV variables or fail
 			conn = boto.connect_route53(self.conf['awsKey'], self.conf['awsSecret'])
 
@@ -205,7 +208,12 @@ class Dns53(Daemon):
 
 				change = changes.add_change("CREATE", host_name, "A")
 				change.add_value(ip)
-				result = changes.commit()
+
+				try:
+					#check the result
+					result = changes.commit()
+				except Exception, e:
+					print '[error]', e
 
 		# schedule the next check
 		self.setNextCheck()
