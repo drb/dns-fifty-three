@@ -11,7 +11,7 @@ from boto.route53.record import ResourceRecordSets
 from daemon import Daemon
 
 checkConfig = {}
-checkConfig['interval'] = 18 # call every 10 minutes;
+checkConfig['interval'] = 1800 # call every 10 minutes;
 
 class Dns53(Daemon):
 
@@ -213,6 +213,7 @@ class Dns53(Daemon):
 
 if __name__ == "__main__":
 
+	# pid needs to be set in the config file
     check = Dns53('/Users/dbullough/dns.pid')
 
     if len(sys.argv) == 2:
