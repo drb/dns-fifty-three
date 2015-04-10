@@ -18,7 +18,7 @@ import platform
 # 802.11 auth: open
 # link auth: wpa2-psk
 # BSSID: 0:1d:aa:a2:13:30
-# SSID: Kaeto
+# SSID: HAL
 
 # Checks the local connection's SSID
 class WifiZone ():
@@ -27,7 +27,7 @@ class WifiZone ():
 
 	def __init__(self, plugin_dir, conf):
 
-		print '[check_load] ', self.__class__.__name__, 'loaded'
+		print '[check_plugin_load] ', self.__class__.__name__, 'loaded'
 
 		self.conf = conf
 
@@ -45,6 +45,11 @@ class WifiZone ():
 			self.conf = dict(self.conf.items() + conf.items())
 
 	def run(self):
+
+		if 'AlwaysPass' in self.conf:
+			if self.conf['AlwaysPass'] == True:
+				print '[check_plugin_bypass] ', self.__class__.__name__, 'bypassed!'
+				return True
 
 		output = False
 

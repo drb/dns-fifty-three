@@ -11,7 +11,7 @@ from boto.route53.record import ResourceRecordSets
 from daemon import Daemon
 
 checkConfig = {}
-checkConfig['interval'] = 1800 # call every 10 minutes;
+checkConfig['interval'] = 18 # call every 10 minutes;
 
 class Dns53(Daemon):
 
@@ -19,9 +19,8 @@ class Dns53(Daemon):
 	plugins = None
 	s = sched.scheduler(time.time, time.sleep)
 
-	def __init__(self, pid):
-
-		print '[log] Daemon loaded', pid
+	def setup(self):
+		print '[log] Daemon loaded'
 
 		# load the config
 		stream = open("config.yaml", 'r')
@@ -121,10 +120,11 @@ class Dns53(Daemon):
 
 	# Schedules the next check
 	def setNextCheck(self):
-		self.s.enter(checkConfig['interval'], 1, self.doChecks, (self.s, "a message"))
+		self.s.enter(checkConfig['interval'], 1, self.doChecks, (self.s, ""))
 
 	# daemon entry
 	def run(self):
+		self.setup()
 		self.setNextCheck();
 		self.s.run()
 
@@ -146,7 +146,7 @@ class Dns53(Daemon):
 
 			# @todo 
 
-			f = urllib2.urlopen(self.conf['ipResolver']).read()
+			f = urllib2.urlopen(self.conf['ipResolver'] + '?zoneId=' + self.conf['zoneId']).read()
 			j = json.loads(f)
 
 			ip = j['client_ip']
@@ -212,7 +212,9 @@ class Dns53(Daemon):
 
 
 if __name__ == "__main__":
-    check = Dns53('/dev/null/dns.pid')
+
+    check = Dns53('/Users/dbullough/dns.pid')
+
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1]:
             check.start()
