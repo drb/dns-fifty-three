@@ -39,7 +39,7 @@ All plugins need to consist of a class, accepting 2 arguments `plugin_dir`, `con
     
             return True
 
-#### Starting the service in foreground
+#### Starting the service in the foreground
 
 This will die with the SSH session
 
