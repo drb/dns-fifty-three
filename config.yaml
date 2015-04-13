@@ -15,3 +15,9 @@ recordName: 'subdomain.domain.com'
 # IP resolver enpoint - this returns a simple JSON structure like this:
 # {"client_ip":"127.0.0.1"}
 ipResolver: http://dns-53.pacosystems.com/
+
+# Debug output
+debugLog: 'dns53.log'
+
+# PID file path
+pid: '/Users/dbullough/dns.pid'

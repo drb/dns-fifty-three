@@ -6,26 +6,33 @@ import time
 import boto
 import urllib2
 import json
+import logging
 
 from boto.route53.record import ResourceRecordSets
 from daemon import Daemon
 
 checkConfig = {}
-checkConfig['interval'] = (60 * 25) # call every 25 minutes;
+checkConfig['interval'] = (60 * 25) # call every 25 minutes
+
+# load the config
+stream = open("config.yaml", 'r')
+conf = yaml.safe_load(stream)
+stream.close()
+
+logging.basicConfig(filename=conf['debugLog'], level=logging.DEBUG)
 
 class Dns53(Daemon):
 
 	conf = {}
 	plugins = None
 	s = sched.scheduler(time.time, time.sleep)
+	logger = logging.getLogger(__name__)
 
 	def setup(self):
-		print '[log] Daemon loaded'
+		logging.debug('[log] Daemon loaded') 
 
 		# load the config
-		stream = open("config.yaml", 'r')
-		self.conf = yaml.safe_load(stream)
-		stream.close()
+		self.conf = conf
 
 		# cache the check plugins
 		self.loadCheckPlugins(self.conf['pluginDir'])
@@ -36,7 +43,7 @@ class Dns53(Daemon):
 		if plugins_root_path != '':
 
 			if os.access(plugins_root_path, os.R_OK) == False:
-				print '[log] Check plugin path is not readable'
+				logging.debug('[log] Check plugin path is not readable')
 				return False
 
 		else:
@@ -72,7 +79,7 @@ class Dns53(Daemon):
 
 				if os.access(plugins_root_path, os.R_OK) == False:
 
-					print '[log] Unable to read dir so skipping this plugin.', plugins_root_path
+					logging.debug('[log] Unable to read dir so skipping this plugin. %s', plugins_root_path)
 					continue
 
 				try:
@@ -88,13 +95,13 @@ class Dns53(Daemon):
 
 					except TypeError:
 
-						print TypeError
+						logging.debug(TypeError)
 
 					# store this in the class, the plugins will be cycled on the next pass
 					self.plugins.append(pluginObj)
 
 				except Exception, ex:
-					print '[error] Error loading check plugin', ex
+					logging.debug('[error] Error loading check plugin %s', ex)
 
 		# execute all cached plugins
 		if self.plugins != None:
@@ -108,7 +115,7 @@ class Dns53(Daemon):
 					output[plugin.__class__.__name__] = plugin.run()
 
 				except Exception, ex:
-					print '[error] Error running plugin', ex
+					logging.debug('[error] Error running plugin %s', ex)
 
 			# Each plugin needs to return True to fire the DNS update request
 			return output
@@ -137,7 +144,7 @@ class Dns53(Daemon):
 
 		for plugin_name, result in plugin_checks.items():
 
-			print '[check]', plugin_name, result
+			logging.debug('[check] %s %s', plugin_name, result)
 
 			if result == False:
 				checks_passed = False
@@ -180,9 +187,9 @@ class Dns53(Daemon):
 
 				# array of ips against the dns entry
 				if ip in current_record.resource_records:
-					print '[log] No changes required'
+					logging.debug('[log] No changes required')
 				else:
-					print '[log] Need to update', ', '.join(current_record.resource_records), 'to', ip
+					logging.debug('[log] Need to update %s to %s', join(current_record.resource_records), ip)
 
 					changes = ResourceRecordSets(conn, self.conf['zoneId'])
 
@@ -198,11 +205,11 @@ class Dns53(Daemon):
 						#check the result
 						result = changes.commit()
 					except Exception, e:
-						print '[error]', e
+						logging.debug('[error] %s', e)
 
 			# if it needs to be created, do it now
 			else:
-				print host_name, '[log] Record needs to be created for', host_name
+				logging.debug('[log] Record needs to be created for %s', host_name)
 
 				changes = ResourceRecordSets(conn, self.conf['zoneId'])
 
@@ -213,7 +220,7 @@ class Dns53(Daemon):
 					#check the result
 					result = changes.commit()
 				except Exception, e:
-					print '[error]', e
+					logging.debug('[error] %s', e)
 
 		# schedule the next check
 		self.setNextCheck()
@@ -222,7 +229,7 @@ class Dns53(Daemon):
 if __name__ == "__main__":
 
 	# pid needs to be set in the config file
-    check = Dns53('/Users/dbullough/dns.pid')
+    check = Dns53(conf['pid'])
 
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1]:
@@ -234,9 +241,9 @@ if __name__ == "__main__":
         elif 'foreground' == sys.argv[1]:
             check.run()
         else:
-            print "Unknown command"
+            logging.debug("Unknown command")
             sys.exit(2)
         sys.exit(0)
     else:
-        print "usage: %s start|stop|restart" % sys.argv[0]
+        logging.debug("usage: %s start|stop|restart", sys.argv[0])
         sys.exit(2)
