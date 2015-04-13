@@ -1,6 +1,6 @@
 *.py[cod]
 
-53.yaml
+*.log
 
 # C extensions
 *.so
