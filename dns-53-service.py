@@ -19,17 +19,24 @@ stream = open("config.yaml", 'r')
 conf = yaml.safe_load(stream)
 stream.close()
 
-logging.basicConfig(filename=conf['debugLog'], level=logging.DEBUG, format='%(asctime)s %(message)s')
+logger = logging.getLogger('dns53.root')
+logger.setLevel(logging.DEBUG)
+logFormat = logging.Formatter("%(asctime)s - %(message)s")
+
+fileHandler = logging.FileHandler(conf['debugLog'])
+fileHandler.setFormatter(logFormat)
+fileHandler.setLevel(logging.DEBUG)
+logger.addHandler(fileHandler)
+
 
 class Dns53(Daemon):
 
 	conf = {}
 	plugins = None
 	s = sched.scheduler(time.time, time.sleep)
-	logger = logging.getLogger(__name__)
 
 	def setup(self):
-		logging.debug('[log] Daemon loaded') 
+		logger.debug('[log] Daemon loaded')
 
 		# load the config
 		self.conf = conf
@@ -43,7 +50,7 @@ class Dns53(Daemon):
 		if plugins_root_path != '':
 
 			if os.access(plugins_root_path, os.R_OK) == False:
-				logging.debug('[log] Check plugin path is not readable')
+				logger.debug('[log] Check plugin path is not readable')
 				return False
 
 		else:
@@ -79,7 +86,7 @@ class Dns53(Daemon):
 
 				if os.access(plugins_root_path, os.R_OK) == False:
 
-					logging.debug('[log] Unable to read dir so skipping this plugin. %s', plugins_root_path)
+					logger.debug('[log] Unable to read dir so skipping this plugin. %s', plugins_root_path)
 					continue
 
 				try:
@@ -95,13 +102,13 @@ class Dns53(Daemon):
 
 					except TypeError:
 
-						logging.debug(TypeError)
+						logger.debug(TypeError)
 
 					# store this in the class, the plugins will be cycled on the next pass
 					self.plugins.append(pluginObj)
 
 				except Exception, ex:
-					logging.debug('[error] Error loading check plugin %s', ex)
+					logger.debug('[error] Error loading check plugin %s', ex)
 
 		# execute all cached plugins
 		if self.plugins != None:
@@ -115,7 +122,7 @@ class Dns53(Daemon):
 					output[plugin.__class__.__name__] = plugin.run()
 
 				except Exception, ex:
-					logging.debug('[error] Error running plugin %s', ex)
+					logger.debug('[error] Error running plugin %s', ex)
 
 			# Each plugin needs to return True to fire the DNS update request
 			return output
@@ -132,8 +139,9 @@ class Dns53(Daemon):
 	# daemon entry
 	def run(self):
 		self.setup()
-		self.setNextCheck();
+		#self.setNextCheck();
 		self.s.run()
+		self.doChecks(self.s, "")
 
 	# Does the checks against the prerequisites
 	def doChecks(self, sched, msg):
@@ -144,18 +152,18 @@ class Dns53(Daemon):
 
 		for plugin_name, result in plugin_checks.items():
 
-			logging.debug('[check] %s %s', plugin_name, result)
+			logger.debug('[check] %s %s', plugin_name, result)
 
 			if result == False:
 				checks_passed = False
 
 		if checks_passed:
 
-			# @todo 
-
 			f = urllib2.urlopen(self.conf['ipResolver'] + '?zoneId=' + self.conf['zoneId']).read()
 			j = json.loads(f)
 
+			existing_entries = None
+			x = None
 			ip = j['client_ip']
 			host_name = self.conf['recordName']
 
@@ -168,28 +176,32 @@ class Dns53(Daemon):
 			conn = boto.connect_route53(self.conf['awsKey'], self.conf['awsSecret'])
 
 			# dict of all entries for this zone
-			existing_entries = conn.get_all_rrsets(self.conf['zoneId'])
+			try:
+				existing_entries = conn.get_all_rrsets(self.conf['zoneId'])
+			except Exception, e:
+				logger.error('[error] %s', e)
 
-			# find the target cname in the entries
-			for x in existing_entries:
-				host_name_period = host_name
-				if host_name[-1] != '.':
-					host_name_period = host_name_period + '.'
+			if existing_entries != None:
+				# find the target cname in the entries
+				for x in existing_entries:
+					host_name_period = host_name
+					if host_name[-1] != '.':
+						host_name_period = host_name_period + '.'
 
-				if x.name == host_name_period:
-					current_record = x
-					break
-				else:
-					x = None
+					if x.name == host_name_period:
+						current_record = x
+						break
+					else:
+						x = None
 
 			# a matching record was found, so test it against the IP we retrieved form the webservice and check if it needs an update
 			if x != None:
 
 				# array of ips against the dns entry
 				if ip in current_record.resource_records:
-					logging.debug('[log] No changes required')
+					logger.debug('[log] No changes required')
 				else:
-					logging.debug('[log] Need to update %s to %s', join(current_record.resource_records), ip)
+					logger.debug('[log] Need to update %s to %s', join(current_record.resource_records), ip)
 
 					changes = ResourceRecordSets(conn, self.conf['zoneId'])
 
@@ -205,11 +217,11 @@ class Dns53(Daemon):
 						#check the result
 						result = changes.commit()
 					except Exception, e:
-						logging.debug('[error] %s', e)
+						logger.debug('[error] %s', e)
 
 			# if it needs to be created, do it now
 			else:
-				logging.debug('[log] Record needs to be created for %s', host_name)
+				logger.debug('[log] Record needs to be created for %s', host_name)
 
 				changes = ResourceRecordSets(conn, self.conf['zoneId'])
 
@@ -220,7 +232,7 @@ class Dns53(Daemon):
 					#check the result
 					result = changes.commit()
 				except Exception, e:
-					logging.debug('[error] %s', e)
+					logger.debug('[error] %s', e)
 
 		# schedule the next check
 		self.setNextCheck()
@@ -239,11 +251,18 @@ if __name__ == "__main__":
         elif 'restart' == sys.argv[1]:
             check.restart()
         elif 'foreground' == sys.argv[1]:
-            check.run()
+			ch = logging.StreamHandler(sys.stdout)
+			ch.setFormatter(logFormat)
+			ch.setLevel(logging.DEBUG)
+			logger.addHandler(ch)
+			try:
+				check.run()
+			except Exception, e:
+				logger.debug('[error] %s', e);
         else:
-            logging.debug("Unknown command")
+            logger.debug("Unknown command")
             sys.exit(2)
         sys.exit(0)
     else:
-        logging.debug("usage: %s start|stop|restart", sys.argv[0])
+        logger.debug("usage: %s start|stop|restart", sys.argv[0])
         sys.exit(2)

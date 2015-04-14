@@ -45,14 +45,14 @@ class WifiZone ():
 			# merge plugin config with main process		
 			self.conf = dict(self.conf.items() + conf.items())
 
-			logging.basicConfig(filename=self.conf['debugLog'], level=logging.DEBUG, format='%(asctime)s %(message)s')
-			logging.debug('[check_plugin_load] %s loaded', self.__class__.__name__)
+			#logging.basicConfig(filename=self.conf['debugLog'], level=logging.DEBUG, format='%(asctime)s %(message)s')
+			#logging.debug('[check_plugin_load] %s loaded', self.__class__.__name__)
 
 	def run(self):
 
 		if 'AlwaysPass' in self.conf:
 			if self.conf['AlwaysPass'] == True:
-				logging.debug('[check_plugin_bypass] %s bypassed!', self.__class__.__name__)
+				#logging.debug('[check_plugin_bypass] %s bypassed!', self.__class__.__name__)
 				return True
 
 		output = False
@@ -78,7 +78,8 @@ class WifiZone ():
 					try:
 						key, value = parts.split(':', 1)
 					except Exception, ex:
-						logging.debug('[error] %s', ex)
+						print ex
+						#logging.debug('[error] %s', ex)
 									
 					# check the name of the SSID against the one in the config
 					# todo make this check all keys in the config if they're there
@@ -87,6 +88,7 @@ class WifiZone ():
 						if str(value) == self.conf['SSID']:
 							output = True
 		else:
-			logging.debug('[warning] %s does not have a method implemented to extract wifi zone yet.', self.__class__.__name__)
+			print 'jkb'
+			#logging.debug('[warning] %s does not have a method implemented to extract wifi zone yet.', self.__class__.__name__)
 
 		return output
