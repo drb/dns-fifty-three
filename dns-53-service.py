@@ -139,9 +139,8 @@ class Dns53(Daemon):
 	# daemon entry
 	def run(self):
 		self.setup()
-		#self.setNextCheck();
-		self.s.run()
 		self.doChecks(self.s, "")
+		self.s.run()
 
 	# Does the checks against the prerequisites
 	def doChecks(self, sched, msg):
@@ -201,7 +200,7 @@ class Dns53(Daemon):
 				if ip in current_record.resource_records:
 					logger.debug('[log] No changes required')
 				else:
-					logger.debug('[log] Need to update %s to %s', join(current_record.resource_records), ip)
+					logger.debug('[log] Need to update %s to %s', ','.join(current_record.resource_records), ip)
 
 					changes = ResourceRecordSets(conn, self.conf['zoneId'])
 
