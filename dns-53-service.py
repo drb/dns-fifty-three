@@ -19,7 +19,7 @@ stream = open("config.yaml", 'r')
 conf = yaml.safe_load(stream)
 stream.close()
 
-logging.basicConfig(filename=conf['debugLog'], level=logging.DEBUG)
+logging.basicConfig(filename=conf['debugLog'], level=logging.DEBUG, format='%(asctime)s %(message)s')
 
 class Dns53(Daemon):
 

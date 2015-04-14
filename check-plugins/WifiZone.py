@@ -45,7 +45,7 @@ class WifiZone ():
 			# merge plugin config with main process		
 			self.conf = dict(self.conf.items() + conf.items())
 
-			logging.basicConfig(filename=self.conf['debugLog'], level=logging.DEBUG)
+			logging.basicConfig(filename=self.conf['debugLog'], level=logging.DEBUG, format='%(asctime)s %(message)s')
 			logging.debug('[check_plugin_load] %s loaded', self.__class__.__name__)
 
 	def run(self):
