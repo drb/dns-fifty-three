@@ -4,7 +4,7 @@ import subprocess
 import os
 import platform
 
-import logging
+#import logging
 
 # Sample data returned from the OSX Airport wifi check
 #
@@ -27,9 +27,15 @@ class WifiZone ():
 
 	conf = {}
 
-	def __init__(self, plugin_dir, conf):
+	def __init__(self, plugin_dir, conf, logger=None):
 
 		self.conf = conf
+		self.logger = None
+
+		if logger != None:
+			self.logger = logger
+
+		print self.logger
 
 		# the check plugin's naming convention shuold be __class__.__name__ . yaml i.e. WifiZone.yaml
 		config_path = plugin_dir + '/' + self.__class__.__name__ + '.yaml'
@@ -45,14 +51,15 @@ class WifiZone ():
 			# merge plugin config with main process		
 			self.conf = dict(self.conf.items() + conf.items())
 
-			#logging.basicConfig(filename=self.conf['debugLog'], level=logging.DEBUG, format='%(asctime)s %(message)s')
-			#logging.debug('[check_plugin_load] %s loaded', self.__class__.__name__)
+			if self.logger != None:
+				self.logger.debug('[check_plugin_load] %s loaded', self.__class__.__name__)
 
 	def run(self):
 
 		if 'AlwaysPass' in self.conf:
 			if self.conf['AlwaysPass'] == True:
-				#logging.debug('[check_plugin_bypass] %s bypassed!', self.__class__.__name__)
+				if self.logger != None:
+					self.logger.debug('[check_plugin_bypass] %s bypassed!', self.__class__.__name__)
 				return True
 
 		output = False
@@ -78,8 +85,8 @@ class WifiZone ():
 					try:
 						key, value = parts.split(':', 1)
 					except Exception, ex:
-						print ex
-						#logging.debug('[error] %s', ex)
+						if self.logger != None:
+							self.logger.debug('[error] %s', ex)
 									
 					# check the name of the SSID against the one in the config
 					# todo make this check all keys in the config if they're there
@@ -88,7 +95,7 @@ class WifiZone ():
 						if str(value) == self.conf['SSID']:
 							output = True
 		else:
-			print 'jkb'
-			#logging.debug('[warning] %s does not have a method implemented to extract wifi zone yet.', self.__class__.__name__)
+			if self.logger != None:
+				self.logger.debug('[warning] %s does not have a method implemented to extract wifi zone yet.', self.__class__.__name__)
 
 		return output

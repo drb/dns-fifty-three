@@ -98,10 +98,9 @@ class Dns53(Daemon):
 					pluginClass = getattr(importedPlugin, plugin_name)
 
 					try:
-						pluginObj = pluginClass(self.conf['pluginDir'], self.conf)
-
+						#pass in configuration object and logger
+						pluginObj = pluginClass(self.conf['pluginDir'], self.conf, logger)
 					except TypeError:
-
 						logger.debug(TypeError)
 
 					# store this in the class, the plugins will be cycled on the next pass
