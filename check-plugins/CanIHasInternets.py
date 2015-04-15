@@ -55,4 +55,9 @@ class CanIHasInternets ():
 					self.logger.debug('[check_plugin_bypass] %s bypassed!', self.__class__.__name__)
 				return True
 
-		return self.isConnected()			
+		hasInternet = self.isConnected()
+
+		if self.logger != None:
+			self.logger.debug('[check_plugin_lookup] checking we can connect to %s ...%s', self.conf['CheckURL'], 'Success!' if hasInternet else 'Failed.')
+
+		return hasInternet		
