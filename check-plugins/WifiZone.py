@@ -4,8 +4,6 @@ import subprocess
 import os
 import platform
 
-#import logging
-
 # Sample data returned from the OSX Airport wifi check
 #
 # agrCtlRSSI: -47
@@ -34,8 +32,6 @@ class WifiZone ():
 
 		if logger != None:
 			self.logger = logger
-
-		print self.logger
 
 		# the check plugin's naming convention shuold be __class__.__name__ . yaml i.e. WifiZone.yaml
 		config_path = plugin_dir + '/' + self.__class__.__name__ + '.yaml'
