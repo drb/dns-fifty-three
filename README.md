@@ -25,13 +25,13 @@ Plugin architecture
 
 Plugins are written in Python, and live in the directory `check-plugins`.
 
-All plugins need to consist of a class, accepting 2 arguments `plugin_dir`, `conf` in the constructor. The only requisite method is `run()`, this must return a boolean True or False to indicate if the check passed.
+All plugins need to consist of a class, accepting 2 required arguments `plugin_dir`, `conf`, and 1 optional argument `logger` in the constructor. The only requisite method is `run()`, this must return a boolean True or False to indicate if the check passed.
 
     class TruthCheck ():
     
       conf = {}
     
-      def __init__(self, plugin_dir, conf):
+      def __init__(self, plugin_dir, conf, logger):
     
             # do something
     
