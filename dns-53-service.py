@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import sys
 import os
 import yaml
@@ -249,6 +251,7 @@ if __name__ == "__main__":
         elif 'restart' == sys.argv[1]:
             check.restart()
         elif 'foreground' == sys.argv[1]:
+        	# when in foreground mode, output logs to stdout
 			ch = logging.StreamHandler(sys.stdout)
 			ch.setFormatter(logFormat)
 			ch.setLevel(logging.DEBUG)
