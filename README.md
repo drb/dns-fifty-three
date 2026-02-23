@@ -1,58 +1,77 @@
-dns-fifty-three
-===============
+# dns-fifty-three
 
-A DynDNS-like clone using Amazon Route53, with conditional updates.
+A DynDNS-like clone using Amazon Route 53 with conditional updates.
 
-Plugins allow the DNS updates to be fired only when the conditions set by the plugin rules are true.
+Plugins allow DNS updates to fire only when conditions set by plugin rules are met — for example, only updating when connected to a specific Wi-Fi SSID, so your home DNS record doesn't get overwritten while you're on a coffee-shop network.
 
-Currently, the only rule is to check if the machine is connected to a particular wireless SSID, as I was sick of the DynDNS agent updating my DNS records for my home IP to be wherever the hell I happened to be connected to.
+## Prerequisites
 
-And that will probably be all they ever do ;)
+- Python 3.10+
+- An AWS account with Route 53 access
 
-Pre-requisites
--------------
+Install dependencies:
 
-A YAML parser is required for the config files.
+```
+pip install -r requirements.txt
+```
 
-`pip install pyyaml`
+## Configuration
 
-BOTO is required to communicate with Route53.
+Copy and edit `config.yaml`:
 
-`sudo pip install -U boto`
+- **awsKey / awsSecret** — AWS credentials (or omit to use environment variables / IAM roles)
+- **zoneId** — Route 53 hosted zone ID
+- **recordName** — the A record to update (e.g. `home.example.com`)
+- **pluginDir** — path to check plugins (default `./check-plugins`)
+- **debugLog** — log file path
+- **pid** — PID file path for daemon mode
 
-Plugin architecture
--------------------
+### IP resolution
 
-Plugins are written in Python, and live in the directory `check-plugins`.
+The service resolves your public IP via [ifconfig.me](https://ifconfig.me). If that fails, it falls back to an optional `ipResolverFallback` URL that returns `{"client_ip":"x.x.x.x"}`.
 
-All plugins need to consist of a class, accepting 2 required arguments `plugin_dir`, `conf`, and 1 optional argument `logger` in the constructor. The only requisite method is `run()`, this must return a boolean True or False to indicate if the check passed.
+A standalone self-hosted IP resolver is included in `ip-resolver-service/` — see [IP Resolver Service](#ip-resolver-service) below.
 
-    class TruthCheck ():
-    
-      conf = {}
-    
-      def __init__(self, plugin_dir, conf, logger):
-    
-            # do something
-    
-      def run(self):
-    
-            return True
+## Usage
 
-#### Starting the service in the foreground
+```bash
+# Start as a daemon
+python3 dns-53-service.py start
 
-This will die with the SSH session
+# Stop
+python3 dns-53-service.py stop
 
-`python dns-53-service.py foreground`
+# Restart
+python3 dns-53-service.py restart
 
-#### Starting the service as a daemon
+# Run in the foreground (logs to stdout)
+python3 dns-53-service.py foreground
+```
 
-`python dns-53-service.py start`
+## Plugin architecture
 
-#### Stopping the service
+Plugins live in the `check-plugins` directory. Every plugin must be a Python module containing a class whose name matches the filename, accepting `plugin_dir`, `conf`, and an optional `logger` in the constructor. The class must implement a `run()` method that returns `True` or `False`.
 
-`python dns-53-service.py stop`
+```python
+class TruthCheck:
 
-#### Restarting the service
+    def __init__(self, plugin_dir, conf, logger=None):
+        self.conf = conf
 
-`python dns-53-service.py restart`
+    def run(self):
+        return True
+```
+
+All plugins must return `True` for the DNS update to proceed.
+
+## IP Resolver Service
+
+`ip-resolver-service/app.py` is a lightweight Flask app you can self-host as a fallback IP resolver. It returns the caller's IP as JSON.
+
+```bash
+cd ip-resolver-service
+pip install flask
+flask --app app run --host 0.0.0.0 --port 5000
+```
+
+Then set `ipResolverFallback` in `config.yaml` to point at it.

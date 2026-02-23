@@ -1,16 +1,16 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 
 import sys
 import os
 import yaml
 import sched
 import time
-import boto
-import urllib2
-import json
+import importlib.util
+import urllib.request
 import logging
 
-from boto.route53.record import ResourceRecordSets
+import boto3
+
 from daemon import Daemon
 
 checkConfig = {}
@@ -51,7 +51,7 @@ class Dns53(Daemon):
 
 		if plugins_root_path != '':
 
-			if os.access(plugins_root_path, os.R_OK) == False:
+			if not os.access(plugins_root_path, os.R_OK):
 				logger.debug('[log] Check plugin path is not readable')
 				return False
 
@@ -59,7 +59,7 @@ class Dns53(Daemon):
 			return False
 
 		# load the plugins once
-		if self.plugins == None:
+		if self.plugins is None:
 
 			sys.path.append(plugins_root_path)
 
@@ -77,24 +77,25 @@ class Dns53(Daemon):
 
 							plugins.append(name[0])
 
-					except IndexError, e:
+					except IndexError as e:
 
 						continue
 
 			# Loop through all the found plugins, import them then create new objects
 			for plugin_name in plugins:
-				
+
 				plugin_path = os.path.join(plugins_root_path, '%s.py' % plugin_name)
 
-				if os.access(plugins_root_path, os.R_OK) == False:
+				if not os.access(plugins_root_path, os.R_OK):
 
 					logger.debug('[log] Unable to read dir so skipping this plugin. %s', plugins_root_path)
 					continue
 
 				try:
 					# import the check plugin
-					import imp
-					importedPlugin = imp.load_source(plugin_name, plugin_path)
+					spec = importlib.util.spec_from_file_location(plugin_name, plugin_path)
+					importedPlugin = importlib.util.module_from_spec(spec)
+					spec.loader.exec_module(importedPlugin)
 
 					# attempt to create an instance of the plugin
 					pluginClass = getattr(importedPlugin, plugin_name)
@@ -108,11 +109,11 @@ class Dns53(Daemon):
 					# store this in the class, the plugins will be cycled on the next pass
 					self.plugins.append(pluginObj)
 
-				except Exception, ex:
+				except Exception as ex:
 					logger.debug('[error] Error loading check plugin %s', ex)
 
 		# execute all cached plugins
-		if self.plugins != None:
+		if self.plugins is not None:
 
 			# stores the output - True indicate a check pass, and all checks must pass for the DNS update to occur
 			output = {}
@@ -122,7 +123,7 @@ class Dns53(Daemon):
 				try:
 					output[plugin.__class__.__name__] = plugin.run()
 
-				except Exception, ex:
+				except Exception as ex:
 					logger.debug('[error] Error running plugin %s', ex)
 
 			# Each plugin needs to return True to fire the DNS update request
@@ -132,6 +133,35 @@ class Dns53(Daemon):
 
 			return False
 
+	def resolve_ip(self):
+		"""Resolve the current public IP address.
+
+		Tries https://ifconfig.me first, then falls back to the configured
+		ipResolverFallback URL (if present).
+		"""
+		# Primary: ifconfig.me returns plain-text IP
+		try:
+			req = urllib.request.Request('https://ifconfig.me', headers={'User-Agent': 'curl/7.0'})
+			ip = urllib.request.urlopen(req, timeout=10).read().decode('utf-8').strip()
+			logger.debug('[log] Resolved IP via ifconfig.me: %s', ip)
+			return ip
+		except Exception as e:
+			logger.debug('[warning] ifconfig.me failed: %s', e)
+
+		# Fallback: custom resolver from config
+		fallback_url = self.conf.get('ipResolverFallback')
+		if fallback_url:
+			try:
+				import json
+				data = urllib.request.urlopen(fallback_url, timeout=10).read().decode('utf-8')
+				j = json.loads(data)
+				ip = j['client_ip']
+				logger.debug('[log] Resolved IP via fallback (%s): %s', fallback_url, ip)
+				return ip
+			except Exception as e:
+				logger.debug('[error] Fallback IP resolver failed: %s', e)
+
+		return None
 
 	# Schedules the next check
 	def setNextCheck(self):
@@ -154,84 +184,79 @@ class Dns53(Daemon):
 
 			logger.debug('[check] %s %s', plugin_name, result)
 
-			if result == False:
+			if not result:
 				checks_passed = False
 
 		if checks_passed:
 
-			f = urllib2.urlopen(self.conf['ipResolver'] + '?zoneId=' + self.conf['zoneId']).read()
-			j = json.loads(f)
+			ip = self.resolve_ip()
 
-			existing_entries = None
-			x = None
-			ip = j['client_ip']
+			if ip is None:
+				logger.error('[error] Could not resolve public IP address')
+				self.setNextCheck()
+				return
+
 			host_name = self.conf['recordName']
+			zone_id = self.conf['zoneId']
 
-			current_record = None
+			# Build boto3 Route53 client
+			# Uses awsKey/awsSecret from config if present, otherwise falls back
+			# to environment variables / IAM roles (boto3 default credential chain)
+			if self.conf.get('awsKey') and self.conf.get('awsSecret'):
+				client = boto3.client(
+					'route53',
+					aws_access_key_id=self.conf['awsKey'],
+					aws_secret_access_key=self.conf['awsSecret'],
+				)
+			else:
+				client = boto3.client('route53')
 
-			# ENV - AWS_ACCESS_KEY_ID
-			# ENV - AWS_SECRET_ACCESS_KEY
-
-			# @todo check if yaml keys exist, otherwise default to ENV variables or fail
-			conn = boto.connect_route53(self.conf['awsKey'], self.conf['awsSecret'])
-
-			# dict of all entries for this zone
+			# Check existing records
+			current_ip = None
 			try:
-				existing_entries = conn.get_all_rrsets(self.conf['zoneId'])
-			except Exception, e:
+				response = client.list_resource_record_sets(
+					HostedZoneId=zone_id,
+					StartRecordName=host_name,
+					StartRecordType='A',
+					MaxItems='1',
+				)
+				for record_set in response.get('ResourceRecordSets', []):
+					# Normalize trailing dot for comparison
+					record_name = record_set['Name'].rstrip('.')
+					target_name = host_name.rstrip('.')
+					if record_name == target_name and record_set['Type'] == 'A':
+						records = record_set.get('ResourceRecords', [])
+						if records:
+							current_ip = records[0]['Value']
+						break
+			except Exception as e:
 				logger.error('[error] %s', e)
 
-			if existing_entries != None:
-				# find the target cname in the entries
-				for x in existing_entries:
-					host_name_period = host_name
-					if host_name[-1] != '.':
-						host_name_period = host_name_period + '.'
-
-					if x.name == host_name_period:
-						current_record = x
-						break
-					else:
-						x = None
-
-			# a matching record was found, so test it against the IP we retrieved form the webservice and check if it needs an update
-			if x != None:
-
-				# array of ips against the dns entry
-				if ip in current_record.resource_records:
-					logger.debug('[log] No changes required')
-				else:
-					logger.debug('[log] Need to update %s to %s', ','.join(current_record.resource_records), ip)
-
-					changes = ResourceRecordSets(conn, self.conf['zoneId'])
-
-					# rmeove the old record first (passing in the existing ip, otherwise this won't work)
-					change = changes.add_change("DELETE", host_name, "A")
-					change.add_value(','.join(current_record.resource_records))
-					
-					# now recreate the record with the new ip
-					change = changes.add_change("CREATE", host_name, "A")
-					change.add_value(ip)
-
-					try:
-						#check the result
-						result = changes.commit()
-					except Exception, e:
-						logger.debug('[error] %s', e)
-
-			# if it needs to be created, do it now
+			if current_ip == ip:
+				logger.debug('[log] No changes required')
 			else:
-				logger.debug('[log] Record needs to be created for %s', host_name)
-
-				changes = ResourceRecordSets(conn, self.conf['zoneId'])
-
-				change = changes.add_change("CREATE", host_name, "A")
-				change.add_value(ip)
+				if current_ip is not None:
+					logger.debug('[log] Need to update %s to %s', current_ip, ip)
+				else:
+					logger.debug('[log] Record needs to be created for %s', host_name)
 
 				try:
-					#check the result
-					result = changes.commit()
-				except Exception, e:
+					client.change_resource_record_sets(
+						HostedZoneId=zone_id,
+						ChangeBatch={
+							'Changes': [{
+								'Action': 'UPSERT',
+								'ResourceRecordSet': {
+									'Name': host_name,
+									'Type': 'A',
+									'TTL': 300,
+									'ResourceRecords': [{'Value': ip}],
+								},
+							}],
+						},
+					)
+					logger.debug('[log] DNS record updated to %s', ip)
+				except Exception as e:
 					logger.debug('[error] %s', e)
 
 		# schedule the next check
@@ -241,29 +266,29 @@ class Dns53(Daemon):
 if __name__ == "__main__":
 
 	# pid needs to be set in the config file
-    check = Dns53(conf['pid'])
+	check = Dns53(conf['pid'])
 
-    if len(sys.argv) == 2:
-        if 'start' == sys.argv[1]:
-            check.start()
-        elif 'stop' == sys.argv[1]:
-            check.stop()
-        elif 'restart' == sys.argv[1]:
-            check.restart()
-        elif 'foreground' == sys.argv[1]:
-        	# when in foreground mode, output logs to stdout
+	if len(sys.argv) == 2:
+		if 'start' == sys.argv[1]:
+			check.start()
+		elif 'stop' == sys.argv[1]:
+			check.stop()
+		elif 'restart' == sys.argv[1]:
+			check.restart()
+		elif 'foreground' == sys.argv[1]:
+			# when in foreground mode, output logs to stdout
 			ch = logging.StreamHandler(sys.stdout)
 			ch.setFormatter(logFormat)
 			ch.setLevel(logging.DEBUG)
 			logger.addHandler(ch)
 			try:
 				check.run()
-			except Exception, e:
-				logger.debug('[error] %s', e);
-        else:
-            logger.debug("Unknown command")
-            sys.exit(2)
-        sys.exit(0)
-    else:
-        logger.debug("usage: %s start|stop|restart", sys.argv[0])
-        sys.exit(2)
+			except Exception as e:
+				logger.debug('[error] %s', e)
+		else:
+			logger.debug("Unknown command")
+			sys.exit(2)
+		sys.exit(0)
+	else:
+		logger.debug("usage: %s start|stop|restart", sys.argv[0])
+		sys.exit(2)

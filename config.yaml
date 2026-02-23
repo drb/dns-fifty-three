@@ -2,7 +2,8 @@
 pluginDir: './check-plugins'
 
 # AWS Credentials
-# TODO also support credentials in env vars
+# If omitted, boto3 will use environment variables (AWS_ACCESS_KEY_ID,
+# AWS_SECRET_ACCESS_KEY) or IAM roles automatically.
 awsKey: XXXXXXXXXXXXXXXXXX
 awsSecret: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
@@ -12,9 +13,11 @@ zoneId: ZXXXXXXXXXXXXX
 # The record (A record) to update
 recordName: 'subdomain.domain.com'
 
-# IP resolver enpoint - this returns a simple JSON structure like this:
-# {"client_ip":"127.0.0.1"}
-ipResolver: http://dns-53.pacosystems.com/
+# IP resolution:
+# Primary lookup uses https://ifconfig.me (plain-text, no config needed).
+# If ifconfig.me fails, the service falls back to this URL (optional).
+# The fallback endpoint should return JSON like: {"client_ip":"127.0.0.1"}
+# ipResolverFallback: http://your-custom-resolver.example.com/
 
 # Debug output
 debugLog: 'dns53.log'

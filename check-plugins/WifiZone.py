@@ -30,31 +30,31 @@ class WifiZone ():
 		self.conf = conf
 		self.logger = None
 
-		if logger != None:
+		if logger is not None:
 			self.logger = logger
 
 		# the check plugin's naming convention shuold be __class__.__name__ . yaml i.e. WifiZone.yaml
 		config_path = plugin_dir + '/' + self.__class__.__name__ + '.yaml'
 
 		# if the path exists, merge the yaml contents with the global config
-		if os.access("./", os.R_OK) != False and os.path.exists(config_path):
+		if os.access("./", os.R_OK) and os.path.exists(config_path):
 
 			# load the plugin config
 			stream = open(config_path, 'r')
 			conf = yaml.safe_load(stream)
 			stream.close()
 
-			# merge plugin config with main process		
-			self.conf = dict(self.conf.items() + conf.items())
+			# merge plugin config with main process
+			self.conf = {**self.conf, **conf}
 
-			if self.logger != None:
+			if self.logger is not None:
 				self.logger.debug('[check_plugin_load] %s loaded', self.__class__.__name__)
 
 	def run(self):
 
 		if 'AlwaysPass' in self.conf:
 			if self.conf['AlwaysPass'] == True:
-				if self.logger != None:
+				if self.logger is not None:
 					self.logger.debug('[check_plugin_bypass] %s bypassed!', self.__class__.__name__)
 				return True
 
@@ -69,8 +69,8 @@ class WifiZone ():
 
 			ls_output = subprocess.check_output(['/System/Library/PrivateFrameworks/Apple80211.framework/Versions/A/Resources/airport', '-I'])
 
-			# todo have checks from other systems
-			tokens = ls_output.split('\n')
+			# decode bytes to string for Python 3
+			tokens = ls_output.decode('utf-8').split('\n')
 
 			for token in tokens:
 
@@ -80,10 +80,10 @@ class WifiZone ():
 
 					try:
 						key, value = parts.split(':', 1)
-					except Exception, ex:
-						if self.logger != None:
+					except Exception as ex:
+						if self.logger is not None:
 							self.logger.debug('[error] %s', ex)
-									
+
 					# check the name of the SSID against the one in the config
 					# todo make this check all keys in the config if they're there
 					if key.strip().lower() == 'ssid':
@@ -91,7 +91,7 @@ class WifiZone ():
 						if str(value) == self.conf['SSID']:
 							output = True
 		else:
-			if self.logger != None:
+			if self.logger is not None:
 				self.logger.debug('[warning] %s does not have a method implemented to extract wifi zone yet.', self.__class__.__name__)
 
 		return output
